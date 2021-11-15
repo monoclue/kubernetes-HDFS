@@ -1,7 +1,7 @@
 dependencies:
   - name: zookeeper
-    version: "2.1.6"
-    repository: https://kubernetes-charts-incubator.storage.googleapis.com/
+    version: "7.4.11"
+    repository: https://charts.bitnami.com/bitnami
     condition: condition.subchart.zookeeper
     tags:
       - ha

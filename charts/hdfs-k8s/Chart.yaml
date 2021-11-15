@@ -3,3 +3,11 @@ appVersion: "1.0"
 description: An entry-point Helm chart for launching HDFS on Kubernetes
 name: hdfs
 version: 0.1.0
+dependencies:
+  - name: zookeeper
+    version: "7.4.11"
+    repository: https://charts.bitnami.com/bitnami
+    condition: condition.subchart.zookeeper
+    tags:
+      - ha
+      - kerberos
