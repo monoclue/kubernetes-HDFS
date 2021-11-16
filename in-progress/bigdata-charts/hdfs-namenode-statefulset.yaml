@@ -172,7 +172,7 @@ spec:
           command: ['/bin/sh', '-c']
           # The start script is provided by a config map.
           args:
-            - /entrypoint.sh "/nn-scripts/{{ .Values.namenodeStartScript }}"
+            - /entrypoint.sh "/nn-scripts/hdfs-k8s-namenode-scripts"
           ports:
           - containerPort: 8020
             name: fs
@@ -256,4 +256,7 @@ spec:
           requests:
             storage: 100Gi
         storageClassName: local-path
-        #selector:
+        selector:
+           matchLabels:
+            app: hdfs-k8s-namenode
+            app-role: big-data 
