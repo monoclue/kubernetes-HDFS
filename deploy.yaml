@@ -1,0 +1,892 @@
+---
+# Source: hdfs/charts/hdfs-journalnode-k8s/templates/journalnode-statefulset.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-hdfs-journalnode
+  labels:
+    app: hdfs-journalnode
+    chart: hdfs-journalnode-k8s-0.1.0
+    release: release-name
+spec:
+  selector:
+    matchLabels:
+      app: hdfs-journalnode
+      release: release-name
+  minAvailable: 2
+---
+# Source: hdfs/charts/hdfs-namenode-k8s/templates/namenode-statefulset.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-hdfs-namenode
+  labels:
+    app: hdfs-namenode
+    chart: hdfs-namenode-k8s-0.1.0
+    release: release-name
+spec:
+  selector:
+    matchLabels:
+      app: hdfs-namenode
+      release: release-name
+  minAvailable: 1
+---
+# Source: hdfs/charts/zookeeper/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-zookeeper
+  labels:
+    app: zookeeper
+    chart: zookeeper-2.1.6
+    release: release-name
+    heritage: Helm
+    component: server
+spec:
+  selector:
+    matchLabels:
+      app: zookeeper
+      release: release-name
+      component: server
+  maxUnavailable: 1
+---
+# Source: hdfs/charts/hdfs-config-k8s/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-hdfs-config
+  labels:
+    app: hdfs-client
+    chart: hdfs-config-k8s-0.1.0
+    release: release-name
+data:
+  core-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+      <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://hdfs-k8s</value>
+      </property>
+      <property>
+        <name>ha.zookeeper.quorum</name>
+        <value>release-name-hdfs-zookeeper-1.release-name-hdfs-zookeeper-headless.bigdata.svc.cluster.local:2181,release-name-hdfs-zookeeper-2.release-name-hdfs-zookeeper-headless.bigdata.svc.cluster.local:2181,release-name-hdfs-zookeeper-0.release-name-hdfs-zookeeper-headless.bigdata.svc.cluster.local:2181</value>
+      </property>
+    </configuration>
+  hdfs-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+      <property>
+        <name>dfs.nameservices</name>
+        <value>hdfs-k8s</value>
+      </property>
+      <property>
+        <name>dfs.ha.namenodes.hdfs-k8s</name>
+        <value>nn0,nn1</value>
+      </property>
+      <property>
+        <name>dfs.namenode.rpc-address.hdfs-k8s.nn0</name>
+        <value>release-name-hdfs-namenode-0.release-name-hdfs-namenode.bigdata.svc.cluster.local:8020</value>
+      </property>
+      <property>
+        <name>dfs.namenode.rpc-address.hdfs-k8s.nn1</name>
+        <value>release-name-hdfs-namenode-1.release-name-hdfs-namenode.bigdata.svc.cluster.local:8020</value>
+      </property>
+      <property>
+        <name>dfs.namenode.http-address.hdfs-k8s.nn0</name>
+        <value>release-name-hdfs-namenode-0.release-name-hdfs-namenode.bigdata.svc.cluster.local:50070</value>
+      </property>
+      <property>
+        <name>dfs.namenode.http-address.hdfs-k8s.nn1</name>
+        <value>release-name-hdfs-namenode-1.release-name-hdfs-namenode.bigdata.svc.cluster.local:50070</value>
+      </property>
+      <property>
+        <name>dfs.namenode.shared.edits.dir</name>
+        <value>qjournal://release-name-hdfs-journalnode-1.release-name-hdfs-journalnode.bigdata.svc.cluster.local:8485;release-name-hdfs-journalnode-2.release-name-hdfs-journalnode.bigdata.svc.cluster.local:8485;release-name-hdfs-journalnode-0.release-name-hdfs-journalnode.bigdata.svc.cluster.local:8485/hdfs-k8s</value>
+      </property>
+      <property>
+        <name>dfs.ha.automatic-failover.enabled</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>dfs.ha.fencing.methods</name>
+        <value>shell(/bin/true)</value>
+      </property>
+      <property>
+        <name>dfs.journalnode.edits.dir</name>
+        <value>/hadoop/dfs/journal</value>
+      </property>
+      <property>
+        <name>dfs.client.failover.proxy.provider.hdfs-k8s</name>
+        <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+      </property>
+      <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>file:///hadoop/dfs/name</value>
+      </property>
+      <property>
+        <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>/hadoop/dfs/data/0</value>
+      </property>
+    </configuration>
+---
+# Source: hdfs/charts/hdfs-datanode-k8s/templates/datanode-daemonset.yaml
+# Provides datanode helper scripts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-hdfs-datanode-scripts
+  labels:
+    app: hdfs-datanode
+    chart: hdfs-datanode-k8s-0.1.0
+    release: release-name
+data:
+  check-status.sh: |
+    #!/usr/bin/env bash
+    # Exit on error. Append "|| true" if you expect an error.
+    set -o errexit
+    # Exit on error inside any functions or subshells.
+    set -o errtrace
+    # Do not allow use of undefined vars. Use ${VAR:-} to use an undefined VAR
+    set -o nounset
+    # Catch an error in command pipes. e.g. mysqldump fails (but gzip succeeds)
+    # in `mysqldump |gzip`
+    set -o pipefail
+    # Turn on traces, useful while debugging.
+    set -o xtrace
+
+    # Check if datanode registered with the namenode and got non-null cluster ID.
+    _PORTS="50075 1006"
+    _URL_PATH="jmx?qry=Hadoop:service=DataNode,name=DataNodeInfo"
+    _CLUSTER_ID=""
+    for _PORT in $_PORTS; do
+      _CLUSTER_ID+=$(curl -s http://localhost:${_PORT}/$_URL_PATH |  \
+          grep ClusterId) || true
+    done
+    echo $_CLUSTER_ID | grep -q -v null
+---
+# Source: hdfs/charts/hdfs-namenode-k8s/templates/namenode-statefulset.yaml
+# Provides namenode helper scripts. Most of them are start scripts
+# that meet different needs.
+# TODO: Support upgrade of metadata in case a new Hadoop version requires it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-hdfs-namenode-scripts
+  labels:
+    app: hdfs-namenode
+    chart: hdfs-namenode-k8s-0.1.0
+    release: release-name
+data:
+  # A bootstrap script which will start namenode daemons after conducting
+  # optional metadata initialization steps. The metadata initialization
+  # steps will take place in case the metadata dir is empty,
+  # which will be the case only for the very first run. The specific steps
+  # will differ depending on whether the namenode is active or standby.
+  # We also assume, for the very first run, namenode-0 will be active and
+  # namenode-1 will be standby as StatefulSet will launch namenode-0 first
+  # and zookeeper will determine the sole namenode to be the active one.
+  # For active namenode, the initialization steps will format the metadata,
+  # zookeeper dir and journal node data entries.
+  # For standby namenode, the initialization steps will simply receieve
+  # the first batch of metadata updates from the journal node.
+  format-and-run.sh: |
+    #!/usr/bin/env bash
+    # Exit on error. Append "|| true" if you expect an error.
+    set -o errexit
+    # Exit on error inside any functions or subshells.
+    set -o errtrace
+    # Do not allow use of undefined vars. Use ${VAR:-} to use an undefined VAR
+    set -o nounset
+    # Catch an error in command pipes. e.g. mysqldump fails (but gzip succeeds)
+    # in `mysqldump |gzip`
+    set -o pipefail
+    # Turn on traces, useful while debugging.
+    set -o xtrace
+
+    _HDFS_BIN=$HADOOP_PREFIX/bin/hdfs
+    _METADATA_DIR=/hadoop/dfs/name/current
+    if [[ "$MY_POD" = "$NAMENODE_POD_0" ]]; then
+      if [[ ! -d $_METADATA_DIR ]]; then
+          $_HDFS_BIN --config $HADOOP_CONF_DIR namenode -format  \
+              -nonInteractive hdfs-k8s ||
+              (rm -rf $_METADATA_DIR; exit 1)
+      fi
+      _ZKFC_FORMATTED=/hadoop/dfs/name/current/.hdfs-k8s-zkfc-formatted
+      if [[ ! -f $_ZKFC_FORMATTED ]]; then
+        _OUT=$($_HDFS_BIN --config $HADOOP_CONF_DIR zkfc -formatZK -nonInteractive 2>&1)
+        # zkfc masks fatal exceptions and returns exit code 0
+        (echo $_OUT | grep -q "FATAL") && exit 1
+        touch $_ZKFC_FORMATTED
+      fi
+    elif [[ "$MY_POD" = "$NAMENODE_POD_1" ]]; then
+      if [[ ! -d $_METADATA_DIR ]]; then
+        $_HDFS_BIN --config $HADOOP_CONF_DIR namenode -bootstrapStandby  \
+            -nonInteractive ||  \
+            (rm -rf $_METADATA_DIR; exit 1)
+      fi
+    fi
+    $HADOOP_PREFIX/sbin/hadoop-daemon.sh --config $HADOOP_CONF_DIR start zkfc
+    $_HDFS_BIN --config $HADOOP_CONF_DIR namenode
+
+  # A start script that will just hang indefinitely. A user can then get
+  # inside the pod and debug. Or a user can conduct a custom manual operations.
+  do-nothing.sh: |
+    #!/usr/bin/env bash
+    tail -f /var/log/dmesg
+
+  # A start script that has user specified content. Can be used to conduct
+  # ad-hoc operation as specified by a user.
+  custom-run.sh: "#!/bin/bash -x\necho Write your own script content!\necho This message will disappear in 10 seconds.\nsleep 10\n"
+---
+# Source: hdfs/charts/zookeeper/templates/config-script.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-zookeeper
+  labels:
+    app: zookeeper
+    chart: zookeeper-2.1.6
+    release: release-name
+    heritage: Helm
+    component: server
+data:
+    ok: |
+      #!/bin/sh
+      zkServer.sh status
+
+    ready: |
+      #!/bin/sh
+      echo ruok | nc 127.0.0.1 ${1:-2181}
+
+    run: |
+      #!/bin/bash
+
+      set -a
+      ROOT=$(echo /apache-zookeeper-*)
+
+      ZK_USER=${ZK_USER:-"zookeeper"}
+      ZK_LOG_LEVEL=${ZK_LOG_LEVEL:-"INFO"}
+      ZK_DATA_DIR=${ZK_DATA_DIR:-"/data"}
+      ZK_DATA_LOG_DIR=${ZK_DATA_LOG_DIR:-"/data/log"}
+      ZK_CONF_DIR=${ZK_CONF_DIR:-"/conf"}
+      ZK_CLIENT_PORT=${ZK_CLIENT_PORT:-2181}
+      ZK_SERVER_PORT=${ZK_SERVER_PORT:-2888}
+      ZK_ELECTION_PORT=${ZK_ELECTION_PORT:-3888}
+      ZK_TICK_TIME=${ZK_TICK_TIME:-2000}
+      ZK_INIT_LIMIT=${ZK_INIT_LIMIT:-10}
+      ZK_SYNC_LIMIT=${ZK_SYNC_LIMIT:-5}
+      ZK_HEAP_SIZE=${ZK_HEAP_SIZE:-2G}
+      ZK_MAX_CLIENT_CNXNS=${ZK_MAX_CLIENT_CNXNS:-60}
+      ZK_MIN_SESSION_TIMEOUT=${ZK_MIN_SESSION_TIMEOUT:- $((ZK_TICK_TIME*2))}
+      ZK_MAX_SESSION_TIMEOUT=${ZK_MAX_SESSION_TIMEOUT:- $((ZK_TICK_TIME*20))}
+      ZK_SNAP_RETAIN_COUNT=${ZK_SNAP_RETAIN_COUNT:-3}
+      ZK_PURGE_INTERVAL=${ZK_PURGE_INTERVAL:-0}
+      ID_FILE="$ZK_DATA_DIR/myid"
+      ZK_CONFIG_FILE="$ZK_CONF_DIR/zoo.cfg"
+      LOG4J_PROPERTIES="$ZK_CONF_DIR/log4j.properties"
+      HOST=$(hostname)
+      DOMAIN=`hostname -d`
+      JVMFLAGS="-Xmx$ZK_HEAP_SIZE -Xms$ZK_HEAP_SIZE"
+
+      APPJAR=$(echo $ROOT/*jar)
+      CLASSPATH="${ROOT}/lib/*:${APPJAR}:${ZK_CONF_DIR}:"
+
+      if [[ $HOST =~ (.*)-([0-9]+)$ ]]; then
+          NAME=${BASH_REMATCH[1]}
+          ORD=${BASH_REMATCH[2]}
+          MY_ID=$((ORD+1))
+      else
+          echo "Failed to extract ordinal from hostname $HOST"
+          exit 1
+      fi
+
+      mkdir -p $ZK_DATA_DIR
+      mkdir -p $ZK_DATA_LOG_DIR
+      echo $MY_ID >> $ID_FILE
+
+      echo "clientPort=$ZK_CLIENT_PORT" >> $ZK_CONFIG_FILE
+      echo "dataDir=$ZK_DATA_DIR" >> $ZK_CONFIG_FILE
+      echo "dataLogDir=$ZK_DATA_LOG_DIR" >> $ZK_CONFIG_FILE
+      echo "tickTime=$ZK_TICK_TIME" >> $ZK_CONFIG_FILE
+      echo "initLimit=$ZK_INIT_LIMIT" >> $ZK_CONFIG_FILE
+      echo "syncLimit=$ZK_SYNC_LIMIT" >> $ZK_CONFIG_FILE
+      echo "maxClientCnxns=$ZK_MAX_CLIENT_CNXNS" >> $ZK_CONFIG_FILE
+      echo "minSessionTimeout=$ZK_MIN_SESSION_TIMEOUT" >> $ZK_CONFIG_FILE
+      echo "maxSessionTimeout=$ZK_MAX_SESSION_TIMEOUT" >> $ZK_CONFIG_FILE
+      echo "autopurge.snapRetainCount=$ZK_SNAP_RETAIN_COUNT" >> $ZK_CONFIG_FILE
+      echo "autopurge.purgeInterval=$ZK_PURGE_INTERVAL" >> $ZK_CONFIG_FILE
+      echo "4lw.commands.whitelist=*" >> $ZK_CONFIG_FILE
+
+      for (( i=1; i<=$ZK_REPLICAS; i++ ))
+      do
+          echo "server.$i=$NAME-$((i-1)).$DOMAIN:$ZK_SERVER_PORT:$ZK_ELECTION_PORT" >> $ZK_CONFIG_FILE
+      done
+
+      rm -f $LOG4J_PROPERTIES
+
+      echo "zookeeper.root.logger=$ZK_LOG_LEVEL, CONSOLE" >> $LOG4J_PROPERTIES
+      echo "zookeeper.console.threshold=$ZK_LOG_LEVEL" >> $LOG4J_PROPERTIES
+      echo "zookeeper.log.threshold=$ZK_LOG_LEVEL" >> $LOG4J_PROPERTIES
+      echo "zookeeper.log.dir=$ZK_DATA_LOG_DIR" >> $LOG4J_PROPERTIES
+      echo "zookeeper.log.file=zookeeper.log" >> $LOG4J_PROPERTIES
+      echo "zookeeper.log.maxfilesize=256MB" >> $LOG4J_PROPERTIES
+      echo "zookeeper.log.maxbackupindex=10" >> $LOG4J_PROPERTIES
+      echo "zookeeper.tracelog.dir=$ZK_DATA_LOG_DIR" >> $LOG4J_PROPERTIES
+      echo "zookeeper.tracelog.file=zookeeper_trace.log" >> $LOG4J_PROPERTIES
+      echo "log4j.rootLogger=\${zookeeper.root.logger}" >> $LOG4J_PROPERTIES
+      echo "log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender" >> $LOG4J_PROPERTIES
+      echo "log4j.appender.CONSOLE.Threshold=\${zookeeper.console.threshold}" >> $LOG4J_PROPERTIES
+      echo "log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout" >> $LOG4J_PROPERTIES
+      echo "log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n" >> $LOG4J_PROPERTIES
+
+      if [ -n "$JMXDISABLE" ]
+      then
+          MAIN=org.apache.zookeeper.server.quorum.QuorumPeerMain
+      else
+          MAIN="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=$JMXPORT -Dcom.sun.management.jmxremote.authenticate=$JMXAUTH -Dcom.sun.management.jmxremote.ssl=$JMXSSL -Dzookeeper.jmx.log4j.disable=$JMXLOG4J org.apache.zookeeper.server.quorum.QuorumPeerMain"
+      fi
+
+      set -x
+      exec java -cp "$CLASSPATH" $JVMFLAGS $MAIN $ZK_CONFIG_FILE
+---
+# Source: hdfs/charts/hdfs-journalnode-k8s/templates/journalnode-statefulset.yaml
+# A headless service to create DNS records.
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-hdfs-journalnode
+  labels:
+    app: hdfs-journalnode
+    chart: hdfs-journalnode-k8s-0.1.0
+    release: release-name
+  annotations:
+    # TODO: Deprecated. Replace tolerate-unready-endpoints with
+    # v1.Service.PublishNotReadyAddresses.
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  ports:
+  - port: 8485
+    name: jn
+  - port: 8480
+    name: http
+  clusterIP: None
+  selector:
+    app: hdfs-journalnode
+    release: release-name
+---
+# Source: hdfs/charts/hdfs-namenode-k8s/templates/namenode-statefulset.yaml
+# A headless service to create DNS records.
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-hdfs-namenode
+  labels:
+    app: hdfs-namenode
+    chart: hdfs-namenode-k8s-0.1.0
+    release: release-name
+  annotations:
+    # TODO: Deprecated. Replace tolerate-unready-endpoints with
+    # v1.Service.PublishNotReadyAddresses.
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  ports:
+  - port: 8020
+    name: fs
+  - port: 50070
+    name: http
+  type: LoadBalancer
+  #clusterIP: None
+  selector:
+    app: hdfs-namenode
+    release: release-name
+---
+# Source: hdfs/charts/zookeeper/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-zookeeper-headless
+  labels:
+    app: zookeeper
+    chart: zookeeper-2.1.6
+    release: release-name
+    heritage: Helm
+spec:
+  clusterIP: None
+  ports:
+    - name: client
+      port: 2181
+      targetPort: client
+      protocol: TCP
+    - name: election
+      port: 3888
+      targetPort: election
+      protocol: TCP
+    - name: server
+      port: 2888
+      targetPort: server
+      protocol: TCP
+  selector:
+    app: zookeeper
+    release: release-name
+---
+# Source: hdfs/charts/zookeeper/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-zookeeper
+  labels:
+    app: zookeeper
+    chart: zookeeper-2.1.6
+    release: release-name
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: client
+      port: 2181
+      protocol: TCP
+      targetPort: client
+  selector:
+    app: zookeeper
+    release: release-name
+---
+# Source: hdfs/charts/hdfs-datanode-k8s/templates/datanode-daemonset.yaml
+# Deleting a daemonset may need some trick. See
+# https://github.com/kubernetes/kubernetes/issues/33245#issuecomment-261250489
+
+#Error from server (Invalid): error when creating "debug.yaml": DaemonSet.apps "release-name-hdfs-datanode" is invalid: spec.template.metadata.labels: Invalid value: map[string]string{"app":"hdfs-datanode", "release":"release-name"}: `selector` does not match template `labels`
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: release-name-hdfs-datanode
+  labels:
+    app: hdfs-datanode
+    chart: hdfs-datanode-k8s-0.1.0
+    release: release-name
+spec:
+  selector:
+    matchLabels:
+      app: hdfs-datanode 
+      release: release-name
+  template:
+    metadata:
+      labels:
+        app: hdfs-datanode
+        release: release-name
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: release-name-hdfs-datanode-exclude
+                  operator: DoesNotExist
+      nodeSelector:
+        app-role: big-data
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: datanode
+          image: uhopper/hadoop-datanode:2.7.2
+          env:
+            - name: HADOOP_CUSTOM_CONF_DIR
+              value: /etc/hadoop-custom-conf
+            - name: MULTIHOMED_NETWORK
+              value: "0"
+          livenessProbe:
+            exec:
+              command:
+                - /dn-scripts/check-status.sh
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - /dn-scripts/check-status.sh
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dn-scripts
+              mountPath: /dn-scripts
+              readOnly: true
+            - name: hdfs-config
+              mountPath: /etc/hadoop-custom-conf
+              readOnly: true
+            - name: hdfs-data-0
+              mountPath: /hadoop/dfs/data/0
+      restartPolicy: Always
+      volumes:
+        - name: dn-scripts
+          configMap:
+            name: release-name-hdfs-datanode-scripts
+            defaultMode: 0744
+        - name: hdfs-data-0
+          hostPath:
+            path: /mnt/sbd1
+        - name: hdfs-config
+          configMap:
+            name: release-name-hdfs-config
+---
+# Source: hdfs/charts/hdfs-client-k8s/templates/client-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-hdfs-client
+  labels:
+    app: hdfs-client
+    chart: hdfs-client-k8s-0.1.0
+    release: release-name
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hdfs-client
+      release: release-name
+  template:
+    metadata:
+      labels:
+        app: hdfs-client
+        release: release-name
+    spec:
+      containers:
+        - name: hdfs-client
+          image: uhopper/hadoop:2.7.2
+          env:
+            - name: HADOOP_CUSTOM_CONF_DIR
+              value: /etc/hadoop-custom-conf
+            - name: MULTIHOMED_NETWORK
+              value: "0"
+          command: ['/bin/sh', '-c']
+          args:
+            - /entrypoint.sh /usr/bin/tail -f /var/log/dmesg
+          volumeMounts:
+            - name: hdfs-config
+              mountPath: /etc/hadoop-custom-conf
+              readOnly: true
+      restartPolicy: Always
+      volumes:
+        - name: hdfs-config
+          configMap:
+            name: release-name-hdfs-config
+---
+# Source: hdfs/charts/hdfs-journalnode-k8s/templates/journalnode-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-hdfs-journalnode
+  labels:
+    app: hdfs-journalnode
+    chart: hdfs-journalnode-k8s-0.1.0
+    release: release-name
+spec:
+  selector:
+    matchLabels:
+      app: hdfs-journalnode
+      release: release-name
+  serviceName: release-name-hdfs-journalnode
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: hdfs-journalnode
+        release: release-name
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                      - hdfs-journalnode
+                  - key: "release"
+                    operator: In
+                    values:
+                      - release-name
+              topologyKey: "kubernetes.io/hostname"
+      nodeSelector:
+        app-role: big-data
+      containers:
+        - name: hdfs-journalnode
+          image: uhopper/hadoop-namenode:2.7.2
+          env:
+            - name: HADOOP_CUSTOM_CONF_DIR
+              value: /etc/hadoop-custom-conf
+          command: ["/entrypoint.sh"]
+          args: ["/opt/hadoop-2.7.2/bin/hdfs", "--config", "/etc/hadoop", "journalnode"]
+          ports:
+          - containerPort: 8485
+            name: jn
+          - containerPort: 8480
+            name: http
+          volumeMounts:
+            # Mount a subpath of the volume so that the journal subdir would be
+            # a brand new empty dir. This way, we won't get affected by
+            # existing files in the volume top dir.
+            - name: editdir
+              mountPath: /hadoop/dfs/journal
+              subPath: journal
+            - name: editdir
+              mountPath: /hadoop/dfs/name
+              subPath: name
+            - name: hdfs-config
+              mountPath: /etc/hadoop-custom-conf
+              readOnly: true
+      restartPolicy: Always
+      volumes:
+        - name: hdfs-config
+          configMap:
+            name: release-name-hdfs-config
+  volumeClaimTemplates:
+    - metadata:
+        name: editdir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "20Gi"
+        storageClassName: local-path
+
+---
+# Source: hdfs/charts/hdfs-namenode-k8s/templates/namenode-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-hdfs-namenode
+  labels:
+    app: hdfs-namenode
+    chart: hdfs-namenode-k8s-0.1.0
+    release: release-name
+spec:
+  selector:
+    matchLabels:
+      app: hdfs-namenode
+      release: release-name
+  serviceName: release-name-hdfs-namenode
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: hdfs-namenode
+        release: release-name
+    spec:
+      # Use hostNetwork so datanodes connect to namenode without going through an overlay network
+      # like weave. Otherwise, namenode fails to see physical IP address of datanodes.
+      # Disabling this will break data locality as namenode will see pod virtual IPs and fails to
+      # equate them with cluster node physical IPs associated with data nodes.
+      # We currently disable this only for CI on minikube.
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                      - hdfs-namenode
+                  - key: "release"
+                    operator: In
+                    values:
+                      - release-name
+              topologyKey: "kubernetes.io/hostname"
+      nodeSelector:
+        app-role: big-data
+      containers:
+        # TODO: Support hadoop version as option.
+        - name: hdfs-namenode
+          image: uhopper/hadoop-namenode:2.7.2
+          env:
+            - name: HADOOP_CUSTOM_CONF_DIR
+              value: /etc/hadoop-custom-conf
+            - name: MULTIHOMED_NETWORK
+              value: "0"
+            # Used by the start script below.
+            - name: MY_POD
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMENODE_POD_0
+              value: release-name-hdfs-namenode-0
+            - name: NAMENODE_POD_1
+              value: release-name-hdfs-namenode-1
+          command: ['/bin/sh', '-c']
+          # The start script is provided by a config map.
+          args:
+            - /entrypoint.sh "/nn-scripts/format-and-run.sh"
+          ports:
+          - containerPort: 8020
+            name: fs
+          - containerPort: 50070
+            name: http
+          volumeMounts:
+            - name: nn-scripts
+              mountPath: /nn-scripts
+              readOnly: true
+            # Mount a subpath of the volume so that the name subdir would be a
+            # brand new empty dir. This way, we won't get affected by existing
+            # files in the volume top dir.
+            - name: metadatadir
+              mountPath: /hadoop/dfs/name
+              subPath: name
+            - name: hdfs-config
+              mountPath: /etc/hadoop-custom-conf
+              readOnly: true
+      restartPolicy: Always
+      volumes:
+        - name: nn-scripts
+          configMap:
+            name: release-name-hdfs-namenode-scripts
+            defaultMode: 0744
+        - name: hdfs-config
+          configMap:
+            name: release-name-hdfs-config
+  volumeClaimTemplates:
+    - metadata:
+        name: metadatadir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "100Gi"
+        storageClassName: local-path
+---
+# Source: hdfs/charts/zookeeper/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-zookeeper
+  labels:
+    app: zookeeper
+    chart: zookeeper-2.1.6
+    release: release-name
+    heritage: Helm
+    component: server
+spec:
+  serviceName: release-name-zookeeper-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+      release: release-name
+      component: server
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+        release: release-name
+        component: server
+    spec:
+      terminationGracePeriodSeconds: 1800
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      containers:
+
+        - name: zookeeper
+          image: "zookeeper:3.5.5"
+          imagePullPolicy: IfNotPresent
+          command: 
+             - "/bin/bash"
+             - "-xec"
+             - "/config-scripts/run"
+          ports:
+            - name: client
+              containerPort: 2181
+              protocol: TCP
+            - name: election
+              containerPort: 3888
+              protocol: TCP
+            - name: server
+              containerPort: 2888
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - /config-scripts/ok
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - /config-scripts/ready
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+          env:
+            - name: ZK_REPLICAS
+              value: "1"
+            - name: JMXAUTH
+              value: "false"
+            - name: JMXDISABLE
+              value: "false"
+            - name: JMXPORT
+              value: "1099"
+            - name: JMXSSL
+              value: "false"
+            - name: ZK_HEAP_SIZE
+              value: "1G"
+            - name: ZK_SYNC_LIMIT
+              value: "10"
+            - name: ZK_TICK_TIME
+              value: "2000"
+            - name: ZOO_AUTOPURGE_PURGEINTERVAL
+              value: "0"
+            - name: ZOO_AUTOPURGE_SNAPRETAINCOUNT
+              value: "3"
+            - name: ZOO_INIT_LIMIT
+              value: "5"
+            - name: ZOO_MAX_CLIENT_CNXNS
+              value: "60"
+            - name: ZOO_PORT
+              value: "2181"
+            - name: ZOO_STANDALONE_ENABLED
+              value: "false"
+            - name: ZOO_TICK_TIME
+              value: "2000"
+          resources:
+            {}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /config-scripts
+      volumes:
+        - name: config
+          configMap:
+            name: release-name-zookeeper
+            defaultMode: 0555
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "5Gi"
+        storageClassName: local-path
